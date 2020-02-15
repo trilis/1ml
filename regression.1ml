@@ -172,3 +172,9 @@ ListN = {
       (::) x xs = xy x :: map xs;
     };
 };
+
+;;
+
+Nested = {existential () = {type t = int; v = 1} :> {type t; v: t}};
+type NESTED = {Nested: {}} with (Nested = Nested);
+existential (N: NESTED) = N.Nested.existential ();

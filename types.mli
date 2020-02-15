@@ -98,6 +98,7 @@ val intersect_row : 'a row -> 'a row -> 'a row
 val diff_row : 'a row -> 'a row -> 'a row
 
 val project_typ : lab list -> typ -> typ (* raise Not_found *)
+val inject_typ : lab list -> typ -> typ -> typ
 
 
 (* Size check *)

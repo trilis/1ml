@@ -267,7 +267,7 @@ Trace.debug (lazy ("[WithT] aks12 = " ^ string_of_norm_extyp (ExT(aks12, StrT []
       try sub_typ env t2 ta (varTs aks12) with Sub e -> error exp.at
         ("refinement type does not match type component: " ^ Sub.string_of_error e)
     in
-    ExT(aks11, subst_typ (subst aks12 ts) t1),
+    ExT(aks11, inject_typ ls t2 (subst_typ (subst aks12 ts) t1)),
     lift_warn typ.at t1 (add_typs aks11 env) (zs1 @ zs2 @ zs3)
 
 and elab_dec env dec l =

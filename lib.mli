@@ -11,6 +11,8 @@ sig
   val for_alli : (int -> 'a -> bool) -> 'a list -> bool
 
   val merge_nodup : 'a list -> 'a list -> 'a list
+
+  val replace_assoc : 'k -> 'v -> ('k * 'v) list -> ('k * 'v) list
 end
 
 module String :

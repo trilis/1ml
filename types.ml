@@ -117,6 +117,14 @@ let rec project_typ ls t =
   | l::ls', StrT(tr) -> project_typ ls' (List.assoc l tr)
   | _ -> raise Not_found
 
+let rec inject_typ ls u t =
+  match ls, t with
+  | [], _ -> u
+  | l::ls', StrT(tr) ->
+    let t' = inject_typ ls' u (List.assoc l tr) in
+    StrT(Lib.List.replace_assoc l t' tr)
+  | _ -> raise Not_found
+
 
 (* Size check *)
 

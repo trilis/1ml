@@ -32,6 +32,11 @@ struct
       | n -> x' :: insert_nodup x xs'
 
   let merge_nodup xs1 xs2 = List.fold_right insert_nodup xs1 xs2
+
+  let rec replace_assoc k v = function
+    | [] -> raise Not_found
+    | (k', v')::kvs ->
+      if k = k' then (k', v)::kvs else (k', v')::replace_assoc k v kvs
 end
 
 module String =
