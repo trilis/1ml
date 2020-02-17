@@ -97,7 +97,8 @@ val map_rowi : (lab -> 'a -> 'b) -> 'a row -> 'b row
 val intersect_row : 'a row -> 'a row -> 'a row
 val diff_row : 'a row -> 'a row -> 'a row
 
-val project_typ : lab list -> typ -> typ (* raise Not_found *)
+val intersect_typs : typ -> typ -> typ
+val merge_typs : typ -> typ -> typ
 
 
 (* Size check *)

@@ -279,27 +279,29 @@ let rec elab_typ env typ l =
     in
     s1, lift_warn typ.at t1 (add_typs aks1 env) (zs1 @ zs2 @ zs3)
 
-  | EL.WithT(typ1, vars, exp) ->
-    let t2, zs2 = elab_pathexp env exp l in
-    let ExT(aks1, t1), zs1 = elab_typ env typ1 l in
-    let ls = List.map (fun var -> var.it) vars in
-Trace.debug (lazy ("[WithT] s1 = " ^ string_of_norm_extyp (ExT(aks1, t1))));
-Trace.debug (lazy ("[WithT] ls = " ^ String.concat "." ls));
-Trace.debug (lazy ("[WithT] t2 = " ^ string_of_norm_typ t2));
-    let ta = try project_typ ls t1 with Not_found ->
-      error typ.at ("path " ^ quote (String.concat "." ls) ^ " unbound") in
-Trace.debug (lazy ("[WithT] ta = " ^ string_of_norm_typ ta));
-    let bs = vars_typ ta in
-    let aks11 = List.filter (fun (a, k) -> not (VarSet.mem a bs)) aks1 in
-    let aks12 = List.filter (fun (a, k) -> VarSet.mem a bs) aks1 in
-Trace.debug (lazy ("[WithT] aks11 = " ^ string_of_norm_extyp (ExT(aks11, StrT []))));
-Trace.debug (lazy ("[WithT] aks12 = " ^ string_of_norm_extyp (ExT(aks12, StrT []))));
+  | EL.AndT(typ1, typ2) ->
+    let s1', zs1 = elab_typ env typ1 l in
+    let s2', zs2 = elab_typ env typ2 l in
+    let ExT(aks1, t1) as s1 = freshen_extyp env s1' in
+    let ExT(aks2, t2) as s2 = freshen_extyp (add_typs aks1 env) s2' in
+Trace.debug (lazy ("[AndT] s1 = " ^ string_of_norm_extyp s1));
+Trace.debug (lazy ("[AndT] s2 = " ^ string_of_norm_extyp s2));
+    let ti = intersect_typs t1 t2 in
+Trace.debug (lazy ("[AndT] ti = " ^ string_of_norm_typ ti));
+    let vi = vars_typ ti in
+    let aksi = List.filter (fun (a, k) -> VarSet.mem a vi) aks1 in
+Trace.debug (lazy ("[AndT] aksi = " ^ string_of_norm_extyp (ExT(aksi, StrT []))));
+    let aks = aks1 @ aks2 in
     let ts, zs3, _ =
-      try sub_typ env t2 ta (varTs aks12) with Sub e -> error exp.at
-        ("refinement type does not match type component: " ^ Sub.string_of_error e)
-    in
-    ExT(aks11, subst_typ (subst aks12 ts) t1),
-    lift_warn typ.at t1 (add_typs aks11 env) (zs1 @ zs2 @ zs3)
+      try sub_typ (add_typs aks env) t2 ti (varTs aksi) with Sub e ->
+        error typ.at ("type refinement does not match: " ^ Sub.string_of_error e) in
+Trace.debug (lazy ("[AndT] ts = " ^ String.concat ", " (List.map string_of_norm_typ ts)));
+    let t = merge_typs (subst_typ (subst (Lib.List.take (List.length ts) aksi) ts) t1) t2 in
+Trace.debug (lazy ("[AndT] t = " ^ string_of_norm_typ t));
+    let vt = vars_typ t in
+    let s = ExT(List.filter (fun (a, k) -> VarSet.mem a vt) aks, t) in
+Trace.debug (lazy ("[AndT] s = " ^ string_of_norm_extyp s));
+    s, lift_warn typ.at t env (zs1 @ zs2 @ zs3)
 
 and elab_dec env dec l =
   Trace.elab (lazy ("[elab_dec] " ^ EL.label_of_dec dec));
