@@ -188,6 +188,9 @@ And = {
   type RDS = {A: {type t}, B: {type t}}
            & {A: {type t}, B: {v: A.t}}
            & {B: {type t}, A: {v: B.t}}
+
+  do {A = {t = bool, v = 1}, B = {t = int, v = true}} :> RDS
+  do {A = {t = bool, v = 1}, B = {t = int, v = true}} :  RDS
 }
 
 ;;
