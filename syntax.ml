@@ -91,6 +91,11 @@ let seqB(l, r) =
   | _, EmptyB -> l.it
   | _ -> SeqB(l, r)
 
+let opt fn (e, t) =
+  match t with
+  | None -> e.it
+  | Some t -> fn(e, t)
+
 (* Sugar *)
 
 let letE(b, e) =
