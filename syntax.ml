@@ -98,6 +98,11 @@ let opt fn (e, t) =
   | None -> e.it
   | Some t -> fn(e, t)
 
+let typE(t) =
+  match t.it with
+  | PathT(e) -> e.it
+  | _ -> TypE(t)
+
 (* Sugar *)
 
 let letE(b, e) =
@@ -112,7 +117,7 @@ let asVarE(e, n, k) =
     let x = var n@@e.at in
     letE(VarB(x, e)@@e.at, k x)
 
-let letT(b, t) = PathT(letE(b, TypE(t)@@t.at)@@span[b.at; t.at])
+let letT(b, t) = PathT(letE(b, typE(t)@@t.at)@@span[b.at; t.at])
 let letD(b, d) = InclD(letT(b, StrT(d)@@d.at)@@span[b.at; d.at])
 let letB(b, b') = InclB(letE(b, StrE(b')@@b'.at)@@span[b.at; b'.at])
 
@@ -207,7 +212,7 @@ type pat = {bind: bind; infer: typ option; annot: typ option}
 
 let recT(p, t2) =
   let b, t1 = p.it in
-  let e = TypE(t2)@@t2.at in
+  let e = typE(t2)@@t2.at in
   let e' =
     match b.it with
     | VarB(x, {it = VarE({it = "$"})}) -> RecE(x, t1, e)
