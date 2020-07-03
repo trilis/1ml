@@ -48,6 +48,7 @@ clean:
 	rm -f *.cmi *.cmo *.cmx *.o *.output *.depend
 	rm -f *.native *.byte $(NAME) $(NAME).opt $(NAME).zip
 	rm -f *~
+	rm -f parser.ml lexer.ml
 
 %.cmi: %.mli
 	ocamlc -c $<
