@@ -121,24 +121,51 @@ and paths_row ta ps = function
 
 
 let rec_from_extyp typ label s =
-  match s with
-  | ExT([], t) ->
-    let rec find_rec = function
-      | AppT(t, ts) ->
-        let rec_t, unroll_t, roll_t, ak = find_rec t in
-        rec_t, AppT(unroll_t, ts), AppT(roll_t, ts), ak
-      | RecT(ak, unroll_t) as rec_t ->
-        rec_t, unroll_t, rec_t, ak
-      | DotT(t, lab) ->
-        let rec_t, unroll_t, roll_t, ak = find_rec t in
-        rec_t, DotT(unroll_t, lab), DotT(roll_t, lab), ak
-      | _ ->
-        error typ.at ("non-recursive type for " ^ label ^ ":"
-                      ^ " " ^ Types.string_of_extyp s) in
-    find_rec t
-  | _ ->
+  match try_rec_from_extyp s with
+  | Some r -> r
+  | None ->
     error typ.at ("non-recursive type for " ^ label ^ ":"
-                  ^ " " ^ Types.string_of_extyp s)
+                  ^ " " ^ string_of_extyp s)
+
+
+let try_unwrap t =
+  match t with
+  | WrapT(ExT([], t)) -> Some (t, fun e -> IL.DotE(e, "wrap"))
+  | _ -> None
+
+let try_unroll t =
+  try_rec_from_typ t
+   |> Lib.Option.map (fun (unroll_t, roll_t) ->
+      unroll_t, fun e -> IL.UnrollE(e))
+
+let try_peel r =
+  try_unwrap r |> Lib.Option.orelse (fun () -> try_unroll r)
+
+let avar fn (t, zs, e) =
+  fn t
+   |> Lib.Option.map (fun (t, f) ->
+      t, zs, f e)
+
+let anexp fn r =
+  match r with
+  | ExT([], t), p, zs, e ->
+    fn t
+     |> Lib.Option.map (fun (t, f) ->
+        ExT([], t), p, zs, f e)
+  | _ -> None
+
+let atyp fn r =
+  match r with
+  | ExT([], t), zs ->
+    fn t
+     |> Lib.Option.map (fun (t, _) ->
+        ExT([], t), zs)
+  | _ -> None
+
+let rec fully fn pre r =
+  match pre fn r with
+  | None -> r
+  | Some r -> fully fn pre r
 
 
 (* Instantiation *)
@@ -286,7 +313,7 @@ and elab_dec env dec l =
     ExT(aks, StrT[l', t]), zs
 
   | EL.InclD(typ) ->
-    let ExT(aks, t) as s, zs = elab_typ env typ l in
+    let ExT(aks, t) as s, zs = fully try_peel atyp (elab_typ env typ l) in
     (match t with
     | StrT(tr) -> ()
     | InferT(z) -> resolve_always z (StrT[])  (* TODO: row polymorphism *)
@@ -416,9 +443,8 @@ Trace.debug (lazy ("[FunE] env =" ^ VarSet.fold (fun a s -> s ^ " " ^ a) (domain
 
   | EL.RollE(var, typ) ->
     let s, zs1 = elab_typ env typ l in
-    let rec_t, unroll_t, roll_t, ak = rec_from_extyp typ "rolling" s in
+    let unroll_t, roll_t = rec_from_extyp typ "rolling" s in
     let var_t = lookup_var env var in
-    let unroll_t = subst_typ (subst [ak] [rec_t]) unroll_t in
     let _, zs2, f =
       try sub_typ env var_t unroll_t []
       with Sub e ->
@@ -430,7 +456,7 @@ Trace.debug (lazy ("[FunE] env =" ^ VarSet.fold (fun a s -> s ^ " " ^ a) (domain
     IL.RollE(IL.AppE(f, IL.VarE(var.it)), erase_typ roll_t)
 
   | EL.IfE(var, exp1, exp2) ->
-    let t0, zs0, ex = elab_instvar env var in
+    let t0, zs0, ex = fully try_peel avar (elab_instvar env var) in
     let _ =
       match t0 with
       | PrimT(Prim.BoolT) -> ()
@@ -449,7 +475,8 @@ Trace.debug (lazy ("[FunE] env =" ^ VarSet.fold (fun a s -> s ^ " " ^ a) (domain
     IL.IfE(ex, IL.AppE(f1, e1), IL.AppE(f2, e2))
 
   | EL.DotE(exp1, var) ->
-    let ExT(aks, t), p, zs1, e1 = elab_instexp env exp1 "" in
+    let ExT(aks, t), p, zs1, e1 =
+      fully try_peel anexp (elab_instexp env exp1 "") in
     let tr, zs2 =
       match t with
       | StrT(tr) -> tr, []
@@ -474,7 +501,7 @@ Trace.debug (lazy ("[DotE] s = " ^ string_of_extyp s));
         IL.DotE(IL.VarE("x"), var.it), erase_extyp s))
 
   | EL.AppE(var1, var2) ->
-    let tf, zs1, ex1 = elab_instvar env var1 in
+    let tf, zs1, ex1 = fully try_peel avar (elab_instvar env var1) in
 Trace.debug (lazy ("[AppE] tf = " ^ string_of_norm_typ tf));
     let aks1, t1, s, p, zs =
       match freshen_typ env tf with
@@ -507,7 +534,7 @@ Trace.debug (lazy ("[AppE] ts = " ^ String.concat ", " (List.map string_of_norm_
         let ExT(aks, t) as s2 = freshen_extyp env s2 in
         aks, t, s2, zs2
       | _ -> error typ.at "non-wrapped type for unwrap" in
-    let t1, zs1, ex = elab_instvar env var in
+    let t1, zs1, ex = fully try_unroll avar (elab_instvar env var) in
     let s1 =
       match t1 with
       | WrapT(s1) -> s1
@@ -524,14 +551,13 @@ Trace.debug (lazy ("[UnwrapE] s2 = " ^ string_of_norm_extyp s2));
 
   | EL.UnrollE(var, typ) ->
     let s, zs1 = elab_typ env typ l in
-    let rec_t, unroll_t, roll_t, ak = rec_from_extyp typ "unrolling" s in
+    let unroll_t, roll_t = rec_from_extyp typ "unrolling" s in
     let var_t = lookup_var env var in
     let _, zs2, f = try sub_typ env var_t roll_t [] with Sub e ->
       error var.at ("unrolled value does not match annotation:"
                     ^ "  " ^ Types.string_of_typ var_t ^ " "
                     ^ "<"
                     ^ "  " ^ Types.string_of_typ roll_t) in
-    let unroll_t = subst_typ (subst [ak] [rec_t]) unroll_t in
     ExT([], unroll_t), Pure, zs1 @ zs2,
     IL.UnrollE(IL.AppE(f, IL.VarE(var.it)))
 
@@ -629,7 +655,8 @@ and elab_bind env bind l =
         erase_extyp s))
 
   | EL.InclB(exp) ->
-    let ExT(aks, t) as s, p, zs, e = elab_instexp env exp l in
+    let ExT(aks, t) as s, p, zs, e =
+      fully try_peel anexp (elab_instexp env exp l) in
     (match t with
     | StrT(tr) -> ()
     | InferT(z) -> resolve_always z (StrT[])  (* TODO: row polymorphism *)
