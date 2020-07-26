@@ -10,8 +10,6 @@ open Erase
 
 module EL = Syntax
 
-exception Error of string
-
 let quote x = "`" ^ x ^ "'"
 
 
