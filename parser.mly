@@ -34,7 +34,7 @@ let parse_error s = raise (Source.Error (Source.nowhere_region, s))
 %token LBRACE RBRACE
 %token DOT TICK
 %token COMMA SEMI
-%token TYPE_ERROR
+%token TYPE_CHECK TYPE_ERROR
 %token LOCAL
 %token IMPORT
 %token WRAP_OP UNWRAP_OP
@@ -498,8 +498,10 @@ atbind :
     { inclB($2)@@at() }
   | DO exp
     { doB($2)@@at() }
+  | TYPE_CHECK exp
+    { TypeAssertB(true, $2)@@at() }
   | TYPE_ERROR exp
-    { TypeErrorB($2)@@at() }
+    { TypeAssertB(false, $2)@@at() }
   | LET bind IN exp
     { inclB(letE($2, $4)@@at())@@at() }
   | IMPORT TEXT

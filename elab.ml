@@ -665,7 +665,11 @@ and elab_bind env bind l =
     );
     s, p, zs, e
 
-  | EL.TypeErrorB(exp) ->
+  | EL.TypeAssertB(true, exp) ->
+    let _ = elab_exp env exp l in
+    ExT([], StrT[]), Pure, [], IL.TupE[]
+
+  | EL.TypeAssertB(false, exp) ->
     (match try Some (elab_exp env exp l) with _ -> None with
     | None -> ExT([], StrT[]), Pure, [], IL.TupE[]
     | Some (s, _, _, _) ->

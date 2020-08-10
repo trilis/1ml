@@ -61,7 +61,7 @@ and bind' =
   | SeqB of bind * bind
   | VarB of var * exp
   | InclB of exp
-  | TypeErrorB of exp
+  | TypeAssertB of bool * exp
 
 
 let uniq_count = ref 0
@@ -73,7 +73,7 @@ let rec every_var pr b =
   | SeqB(b1, b2) -> every_var pr b1 && every_var pr b2
   | VarB(v, _) -> pr v
   | InclB(_) -> false
-  | TypeErrorB(_) -> true
+  | TypeAssertB(_) -> true
 
 let index n = "_" ^ string_of_int n
 
@@ -419,7 +419,7 @@ let label_of_bind b =
   | SeqB _ -> "SeqB"
   | VarB _ -> "VarB"
   | InclB _ -> "InclB"
-  | TypeErrorB _ -> "TypeErrorB"
+  | TypeAssertB _ -> "TypeAssertB"
 
 
 let string_of_var x = "\"" ^ x.it ^ "\""
@@ -480,7 +480,7 @@ and string_of_bind b =
   | SeqB(b1, b2) -> node' [string_of_bind b1; string_of_bind b2]
   | VarB(x, e) -> node' [string_of_var x; string_of_exp e]
   | InclB(e) -> node' [string_of_exp e]
-  | TypeErrorB(e) -> node' [string_of_exp e]
+  | TypeAssertB(b, e) -> node' [string_of_bool b; string_of_exp e]
 
 (* Import *)
 
@@ -528,4 +528,4 @@ and imports_bind bind =
   | SeqB(bind1, bind2) -> imports_bind bind1 @ imports_bind bind2
   | VarB(_, exp) -> imports_exp exp
   | InclB exp -> imports_exp exp
-  | TypeErrorB exp -> imports_exp exp
+  | TypeAssertB(_, exp) -> imports_exp exp

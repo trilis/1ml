@@ -265,6 +265,7 @@ rule token = parse
   | "as" { AS }
   | "do" { DO }
   | "else" { ELSE }
+  | "type_check" { TYPE_CHECK }
   | "type_error" { TYPE_ERROR }
   | "fun" { FUN }
   | "if" { IF }
