@@ -17,6 +17,7 @@ type eff =
 type feff =
   | Explicit of eff
   | Implicit
+  | ImplicitModule
 
 type kind =
   | BaseK
@@ -590,6 +591,7 @@ let string_of_eff_sort = function
 let string_of_feff_sort = function
   | Explicit eff -> string_of_eff_sort eff
   | Implicit -> "implicit"
+  | ImplicitModule -> "implicit_module"
 
 let rec string_of_typ_sort = function
   | VarT(a, k) -> "abstract"
@@ -655,6 +657,7 @@ let rec string_of_typ' prec = function
       | Explicit Impure -> " ~> "
       | Explicit Pure -> " -> "
       | Implicit -> "'-> "
+      | ImplicitModule -> " -(M)-> "
       ) ^
       string_of_extyp' binder_prec s
     )
@@ -829,6 +832,7 @@ let rec print_typ' prec ctxt = function
         | Explicit Impure -> "~>"
         | Explicit Pure -> "->"
         | Implicit -> "'->"
+        | ImplicitModule -> "-(M)->"
         );
       print_break 1 2;
       open_box 0;

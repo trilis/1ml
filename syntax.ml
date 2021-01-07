@@ -11,6 +11,7 @@ type impl = (impl', unit) phrase
 and impl' =
   | Impl
   | Expl
+  | ImplModule
 
 type eff = (eff', unit) phrase
 and eff' =
@@ -369,6 +370,7 @@ let label_of_impl i =
   match i.it with
   | Expl -> "Expl"
   | Impl -> "Impl"
+  | ImplModule -> "ImplModule"
 
 let label_of_eff p =
   match p.it with

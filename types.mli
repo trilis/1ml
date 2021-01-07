@@ -20,6 +20,7 @@ type eff =
 type feff =
   | Explicit of eff
   | Implicit
+  | ImplicitModule
 
 type kind =
   | BaseK

@@ -194,6 +194,7 @@ let elab_impl env impl =
   match impl.it with
   | EL.Expl -> Explicit Pure
   | EL.Impl -> Implicit
+  | EL.ImplModule -> ImplicitModule
 
 let elab_eff env eff =
   match eff.it with
@@ -503,20 +504,26 @@ Trace.debug (lazy ("[DotE] s = " ^ string_of_extyp s));
   | EL.AppE(var1, var2) ->
     let tf, zs1, ex1 = fully try_peel avar (elab_instvar env var1) in
 Trace.debug (lazy ("[AppE] tf = " ^ string_of_norm_typ tf));
-    let aks1, t1, s, p, zs =
+    let aks1, t1, s, p, zs, im =
       match freshen_typ env tf with
-      | FunT(aks1, t1, s, Explicit p) -> aks1, t1, s, p, []
+      | FunT(aks1, t1, s, Explicit p) -> aks1, t1, s, p, [], false
       | InferT(z) ->
         let t1, zs1 = guess_typ (Env.domain_typ env) BaseK in
         let t2, zs2 = guess_typ (Env.domain_typ env) BaseK in
         let s = ExT([], t2) in
         resolve_always z (FunT([], t1, s, Explicit Impure));
-        [], t1, s, Impure, zs1 @ zs2
+        [], t1, s, Impure, zs1 @ zs2, false
+      | FunT(aks1, t1, s, ImplicitModule) -> aks1, t1, s, Impure, [], true
       | _ -> error var1.at "expression is not a function" in
     let t2 = lookup_var env var2 in
 Trace.debug (lazy ("[AppE] s1 = " ^ string_of_norm_extyp (ExT(aks1, t1))));
 Trace.debug (lazy ("[AppE] t2 = " ^ string_of_norm_typ t2));
-    let ts, zs3, f =
+    if im && (try snd (sub_typ env t2 t1 (varTs aks1), false) with Sub e -> true) then
+      let names = names env in
+      let marg = List.fold_right (fun name acc ->
+        try snd (sub_typ env (lookup_val name env) t1 (varTs aks1), name) with Sub e -> acc) names ""
+      in elab_exp env ((EL.asVarE ((EL.AppE(var1, marg@@nowhere_region))@@nowhere_region, fun x -> (EL.AppE(x, var2))@@nowhere_region))@@nowhere_region) l
+    else let ts, zs3, f =
       try sub_typ env t2 t1 (varTs aks1) with Sub e -> error var2.at
         ("argument type does not match function: " ^ Sub.string_of_error e)
     in

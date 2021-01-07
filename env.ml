@@ -30,6 +30,8 @@ let domain map =
 let domain_typ env = domain env.typ
 let domain_val env = domain env.var
 
+let names env = List.map fst (VarMap.bindings env.var)
+
 
 (* Freshening *)
 

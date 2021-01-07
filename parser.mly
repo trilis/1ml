@@ -32,6 +32,7 @@ let parse_error s = raise (Source.Error (Source.nowhere_region, s))
 %token WITH
 %token LPAR RPAR
 %token LBRACE RBRACE
+%token LBRACKET RBRACKET
 %token DOT TICK
 %token COMMA SEMI
 %token TYPE_CHECK TYPE_ERROR
@@ -173,10 +174,15 @@ explparam :
   | atpat
     { let b, t = (defaultP $1).it in (b, t, Expl@@at())@@at() }
 ;
+implmoduleparam :
+  | atpat_module_impl
+    { let b, t = (defaultP $1).it in (b, t, ImplModule@@at())@@at() }
 param :
   | explparam
     { $1 }
   | implparam
+    { $1 }
+  | implmoduleparam
     { $1 }
 ;
 paramlist :
@@ -528,6 +534,10 @@ bindpat :
   | sym
     { headP $1@@at() }
 ;
+
+atpat_module_impl :
+  | LBRACKET patlist RBRACKET
+    { match $2 with [p] -> p | ps -> tupP(ps, at())@@at() }
 
 atpat :
   | phead

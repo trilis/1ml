@@ -1,0 +1,16 @@
+type SHOW = {
+    type t
+    show : t -> text
+}
+
+Show_int = {
+    type t = int
+    show = primitive "Int.toText"
+}
+
+show [S: SHOW] x = S.show x
+show2 = fun [S: SHOW] x => S.show x
+
+test = show 5
+
+do Text.print test

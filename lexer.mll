@@ -299,6 +299,8 @@ rule token = parse
   | "}" { RBRACE }
   | "," { COMMA }
   | ";" { SEMI }
+  | "[" { LBRACKET }
+  | "]" { RBRACKET }
   | word as s { WORD s }
   | symbol* as s { SYM s }
   | num as s { NUM (convert_num s) }

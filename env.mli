@@ -23,6 +23,8 @@ val lookup_val : var -> env -> typ (* raise Not_found *)
 val domain_typ : env -> varset
 val domain_val : env -> varset
 
+val names : env -> var list
+
 
 (* Freshening *)
 

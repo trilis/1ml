@@ -91,6 +91,7 @@ Text = {
   l > r = primitive "Text.>" (l, r)
   l <= r = primitive "Text.<=" (l, r)
   l >= r = primitive "Text.>=" (l, r)
+  l == r = primitive "Text.==" (l, r)
   length t = primitive "Text.length" t
   sub t i = primitive "Text.sub" (t, i)
   fromChar c = primitive "Text.fromChar" c
@@ -99,6 +100,7 @@ Text = {
 }
 type text = Text.t
 (++) = Text.++
+(==) = Text.==
 print = Text.print
 
 

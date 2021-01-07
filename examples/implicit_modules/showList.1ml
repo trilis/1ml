@@ -1,0 +1,26 @@
+type SHOW = {
+    type t
+    show : t -> text
+}
+
+Show_int = {
+    type t = int
+    show = primitive "Int.toText"
+}
+
+Show_bool = {
+    type t = bool
+    show x = if x then "true" else "false"
+}
+
+string_of_list show xs = foldl xs "" (fun acc x => (if (acc == "") then "" else (acc ++ ", ")) ++ (show x))
+
+Show_list [S: SHOW] = {
+    type t = list S.t
+    show = string_of_list S.show
+}
+
+show (S: SHOW) x = S.show x
+
+do Text.print (show (cons 1 (cons 2 (cons 3 nil))))
+do Text.print (show (cons true (cons false nul)))

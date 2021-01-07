@@ -1,0 +1,9 @@
+type MONAD = {
+  type m a
+  return 'a : a ~> m a
+  bind 'a 'b : m a -> (a ~> m b) ~> m b
+}
+
+return (M : MONAD) x = M.return x
+(>>=) (M : MONAD) m k = M.bind m k
+
