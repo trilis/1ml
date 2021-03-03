@@ -1,0 +1,5 @@
+type T = {
+    type a
+}
+
+f : [A : T] -> [B : T] -> (A.a, B.a) -> () = fun [A : T] [B : T] (x : (A.a, B.a)) => ()

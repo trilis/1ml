@@ -1,26 +1,32 @@
+local import "prelude"
+import "../../basis/list.1ml"
+
 type SHOW = {
     type t
-    show : t -> text
+    show : t ~> text
 }
 
-Show_int = {
+implicit Show_int = {
     type t = int
     show = primitive "Int.toText"
 }
 
-Show_bool = {
+implicit Show_bool = {
     type t = bool
     show x = if x then "true" else "false"
 }
 
-string_of_list show xs = foldl xs "" (fun acc x => (if (acc == "") then "" else (acc ++ ", ")) ++ (show x))
-
-Show_list [S: SHOW] = {
+implicit Show_list [S: SHOW] = {
     type t = list S.t
-    show = string_of_list S.show
+    show x = "[" ++ (toText S.show x) ++ "]"
 }
 
-show (S: SHOW) x = S.show x
+show [S: SHOW] x = S.show x
 
-do Text.print (show (cons 1 (cons 2 (cons 3 nil))))
-do Text.print (show (cons true (cons false nul)))
+test1 = show (1 :: (2 :: (3 :: nil)))
+test2 = show ((1 :: (2 :: nil)) :: ((3 :: (4 :: nil)) :: (nil :: ((5 :: (6 :: nil)) :: nil))))
+test3 = show nil
+
+do Text.print (test1 ++ "\n")
+do Text.print (test2 ++ "\n")
+do Text.print (test3 ++ "\n")

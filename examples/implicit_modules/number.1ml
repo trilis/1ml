@@ -1,0 +1,45 @@
+type NUM = {
+    type t
+    (+) : t -> t -> t
+    (-) : t -> t -> t
+    (/) : t -> t -> t
+    (*) : t -> t -> t
+    ;;TODO unary symbol operator
+    minus : t -> t
+    print : t ~> ()
+}
+
+(+) [N : NUM] = N.(+)
+(-) [N : NUM] = N.(-)
+(/) [N : NUM] = N.(/)
+(*) [N : NUM] = N.(*)
+minus [N : NUM] = N.minus
+
+print [N : NUM] = N.print 
+
+implicit Int = {
+    type t = primitive "int"
+    l + r = primitive "Int.+" (l, r)
+    l - r = primitive "Int.-" (l, r)
+    l * r = primitive "Int.*" (l, r)
+    l / r = primitive "Int./" (l, r)
+    minus x = primitive "Int.-" (0, x)
+    print = primitive "Int.print"
+}
+
+implicit Float = {
+    type t = primitive "float"
+    l + r = primitive "Float.+" (l, r)
+    l - r = primitive "Float.-" (l, r)
+    l * r = primitive "Float.*" (l, r)
+    l / r = primitive "Float./" (l, r)
+    minus x = primitive "Float.-" (0.0, x)
+    print = primitive "Float.print"
+}
+
+;;TODO operator precedence
+x = 1 + 4 + 5 / 5
+y = 1.2 + 4.4 + 5.9 / 6.2
+sq [N : NUM] (x : N.t) = x * x
+a = sq 4.9
+b = sq 6

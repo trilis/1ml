@@ -1,0 +1,21 @@
+local import "prelude"
+
+type SHOW = {
+    type t
+    show : t -> text
+}
+
+show [S : SHOW] x = S.show x
+print [S : SHOW] x = Text.print (show x ++ "\n")
+
+implicit Show_int = {
+    type t = int
+    show = primitive "Int.toText"
+}
+
+implicit Show_bool = {
+    type t = bool
+    show x = if x then "true" else "false"
+}
+
+do print 5

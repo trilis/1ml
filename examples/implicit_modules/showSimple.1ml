@@ -1,0 +1,24 @@
+import "../../prelude.1ml"
+
+type SHOW = {
+    type t
+    show : t -> text
+}
+
+show [S: SHOW] x = S.show x
+show2 = fun [S: SHOW] x => S.show x
+
+implicit Show_int = {
+    type t = int
+    show = primitive "Int.toText"
+}
+
+implicit Show_bool = {
+    type t = bool
+    show x = if x then "true" else "false"
+}
+
+test_ex = show [Show_int] 5
+test = show 5
+
+do Text.print (test ++ "\n")

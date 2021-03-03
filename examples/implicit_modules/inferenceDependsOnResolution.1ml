@@ -1,0 +1,16 @@
+import "../../prelude.1ml"
+
+type SQRTABLE = {
+    type t
+    sqrt: t -> t
+}
+
+implicit Squarable_float = {
+    type t = primitive "float"
+    sqrt = primitive "Float.sqrt"
+}
+
+sqrt [S: SQRTABLE] = S.sqrt
+
+;; should be typed as float -> float
+sqrt_twice x = sqrt (sqrt x)

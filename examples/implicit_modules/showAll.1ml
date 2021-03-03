@@ -1,0 +1,41 @@
+local import "prelude"
+import "../../basis/list.1ml"
+
+type SHOW = {
+    type t
+    show : t ~> text
+}
+
+show [S : SHOW] x = S.show x
+print [S : SHOW] x = Text.print (show x ++ "\n")
+
+implicit Show_text = {
+    type t = text
+    show x = "\"" ++ x ++ "\""
+}
+
+implicit Show_int = {
+    type t = int
+    show = primitive "Int.toText"
+}
+
+do Text.print (show "4" ++ "\n") 
+do print 5
+
+implicit Show_pair [S1 : SHOW] [S2 : SHOW] = {
+    type t = (S1.t, S2.t)
+    show (x, y) = "(" ++ S1.show x ++ "," ++ S2.show y ++ ")"
+}
+
+implicit Show_list [S: SHOW] = {
+    type t = list S.t
+    show x = "[" ++ (toText S.show x) ++ "]"
+}
+
+g (x : bool) = let implicit Show_bool = {
+    type t = bool
+    show x = if x then "true" else "false"
+} in show x
+
+do print (("hello" , 1) :: (("world", 2) :: nil))
+do Text.print (g true ++ "\n")

@@ -1,9 +1,35 @@
+local import "prelude"
+import "../../basis/list.1ml"
+
 type MONAD = {
   type m a
   return 'a : a ~> m a
   bind 'a 'b : m a -> (a ~> m b) ~> m b
 }
 
-return (M : MONAD) x = M.return x
-(>>=) (M : MONAD) m k = M.bind m k
+return [M : MONAD] x = M.return x
+bind [M : MONAD] m k = M.bind m k
 
+implicit Monad_option = {
+  type m a = Opt.t a
+  return x = Opt.some x
+  bind x k = Opt.case { none = none, some y = k y} x
+}
+
+implicit Monad_list = {
+  type m = list
+  return x = x :: nil
+  bind x k = flatMap k x
+}
+
+;;ambiguous
+;;test = (return 5) >>= (fun x => return x)
+
+;;TODO investigate
+;;test = (return [Monad_option] 5) >>= (fun x => return [Monad_option] x)
+
+;;l = (return [Monad_list] 5) >>= (fun x => return [Monad_list] x)
+
+m = bind (1 :: (2 :: (3 :: nil))) (fun x => return x)
+
+;;n = bind (return [Monad_list] 5) (fun x => x :: (2 :: (3 :: nil)))

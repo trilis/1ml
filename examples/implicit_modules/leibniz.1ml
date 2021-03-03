@@ -1,0 +1,31 @@
+import "../../prelude.1ml"
+
+type T1 = {
+    t : (a : type) -> type
+}
+
+Eq : {
+    type eq a b
+
+    refl 'a : eq a a 
+    cast 'a 'b : eq a b ~> a ~> b
+    lift 'a 'b : eq a b -> [T : T1] -> eq (T.t a) (T.t b)
+    symm 'a 'b : eq a b -> eq b a
+    trans 'a 'b 'c : eq a b -> eq b c -> eq a c
+} = {
+    implicit Id = {
+        type t a = a
+    }
+
+    type eq a b = wrap [T : T1] -> T.t a -> T.t b
+
+    refl 'a [T : T1] (x : T.t a) : T.t a = x
+    cast 'a 'b (e : eq a b) = e [Id]
+    lift 'a 'b (e : eq a b) [T : T1] [U : T1] = let TU = {
+        type t c = U.t (T.t c)
+    } in e [TU]
+    symm 'a 'b (e : eq a b) = let R :> T1 = {
+        type t c = eq c a
+    } in lift e [R] [Id] refl
+    trans 'a 'b 'c ab bc [T : T1] x = lift bc [T] [Id] (lift ab [T] [Id] x)
+}

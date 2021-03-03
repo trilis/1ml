@@ -1,0 +1,17 @@
+;; TODO: somehow simulate ADTs?
+
+type z = {
+    type t
+    Z : t
+}
+
+type s = {
+    type n
+    type t
+    S : n -> t
+}
+
+type N = {
+    type t
+    n : t
+}

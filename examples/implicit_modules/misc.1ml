@@ -1,0 +1,20 @@
+type T = {
+    type t
+    x : t
+}
+
+;;SHOULD FAIL
+;;f2 'a (x : a) [M : T] = x :> M.t; ()
+
+f3 [M : T] (x : M.t) y = y :> M.t; ()
+
+;;f4 = rec (M : T) (x : M.t) => ()
+
+;;f5 = rec self => fun x : () => ()
+
+;;SHOULD FAIL
+;;f6 'a : [M : T] -> a -> () = fun [M : T] (x : M.t) => ()
+
+f7 (g : [M : T] -> M.t -> ()) : () = ()
+
+f8 [M : T] [N : T] = N.x
