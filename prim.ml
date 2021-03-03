@@ -7,6 +7,7 @@ type typ =
   | IntT
   | CharT
   | TextT
+  | FloatT
   | VarT
 
 type effect =
@@ -16,6 +17,7 @@ type effect =
 type const =
   | BoolV of bool
   | IntV of int
+  | FloatV of float
   | CharV of char
   | TextV of string
   | FunV of func
@@ -31,6 +33,7 @@ let typ_of_string = function
   | "int" -> Some IntT
   | "char" -> Some CharT
   | "text" -> Some TextT
+  | "float" -> Some FloatT
   | _ -> None
 
 let string_of_typ = function
@@ -38,6 +41,7 @@ let string_of_typ = function
   | IntT -> "int"
   | CharT -> "char"
   | TextT -> "text"
+  | FloatT -> "float"
   | VarT -> assert false
 
 let typ_of_const = function
@@ -45,6 +49,7 @@ let typ_of_const = function
   | IntV _ -> IntT
   | CharV _ -> CharT
   | TextV _ -> TextT
+  | FloatV _ -> FloatT
   | FunV _ -> assert false
 
 let string_of_const = function
@@ -53,6 +58,7 @@ let string_of_const = function
   | CharV(c) -> "'" ^ Char.escaped c ^ "'"
   | TextV(t) -> "\"" ^ String.escaped t ^ "\""
   | FunV(f) -> "(prim " ^ f.name ^ ")"
+  | FloatV(f) -> string_of_float f
 
 let is_poly {typ = ts1, _, ts2} = List.mem VarT ts1 || List.mem VarT ts2
 
@@ -64,6 +70,7 @@ type 'a def =
   | IntD: int def
   | CharD: char def
   | TextD: string def
+  | FloatD: float def
   | VarD: const def
   | ProdD: 'a def * 'b def -> ('a * 'b) def
 
@@ -75,6 +82,7 @@ let rec typs_of: type a. a def -> typ list = function
   | IntD -> [IntT]
   | CharD -> [CharT]
   | TextD -> [TextT]
+  | FloatD -> [FloatT]
   | VarD -> [VarT]
   | ProdD (l, r) -> typs_of l @ typs_of r
 
@@ -83,6 +91,7 @@ let rec inj: type a. a def -> a -> const list -> const list = function
   | BoolD -> fun v vs -> BoolV v :: vs
   | IntD -> fun v vs -> IntV v :: vs
   | CharD -> fun v vs -> CharV v :: vs
+  | FloatD -> fun v vs -> FloatV v :: vs
   | TextD -> fun v vs -> TextV v :: vs
   | VarD -> fun v vs -> v :: vs
   | ProdD (lD, rD) ->
@@ -94,6 +103,7 @@ let rec prj: type a. a def -> const list -> a * const list = function
   | IntD -> (function (IntV v :: vs) -> (v, vs) | _ -> failwith "int")
   | CharD -> (function (CharV v :: vs) -> (v, vs) | _ -> failwith "char")
   | TextD -> (function (TextV v :: vs) -> (v, vs) | _ -> failwith "text")
+  | FloatD -> (function (FloatV v :: vs) -> (v, vs) | _ -> failwith "float")
   | VarD -> (function (v :: vs) -> (v, vs) | _ -> failwith "var")
   | ProdD (lD, rD) ->
     let prjL = prj lD and prjR = prj rD in
@@ -139,12 +149,20 @@ let funs =
     def "Text.>" (TextD & TextD) PureE BoolD (fun (i1, i2) -> i1 > i2);
     def "Text.<=" (TextD & TextD) PureE BoolD (fun (i1, i2) -> i1 <= i2);
     def "Text.>=" (TextD & TextD) PureE BoolD (fun (i1, i2) -> i1 >= i2);
+    def "Text.==" (TextD & TextD) PureE BoolD (fun (i1, i2) -> i1 == i2);
 
     def "Text.length" TextD PureE IntD String.length;
     def "Text.sub" (TextD & IntD) PureE CharD (fun (t, i) -> t.[i]);
     def "Text.fromChar" CharD PureE TextD (String.make 1);
 
     def "Text.print" TextD ImpureE VoidD (fun t -> print_string t; flush_all ());
+
+    def "Float.sqrt" FloatD PureE FloatD sqrt;
+    def "Float.+" (FloatD & FloatD) PureE FloatD (fun (i1, i2) -> i1 +. i2);
+    def "Float.-" (FloatD & FloatD) PureE FloatD (fun (i1, i2) -> i1 -. i2);
+    def "Float./" (FloatD & FloatD) PureE FloatD (fun (i1, i2) -> i1 /. i2);
+    def "Float.*" (FloatD & FloatD) PureE FloatD (fun (i1, i2) -> i1 *. i2);
+    def "Float.print" FloatD ImpureE VoidD (fun i -> print_float i; flush_all ());
 
     def "System.exit" IntD ImpureE VarD exit;
   ]

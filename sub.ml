@@ -73,7 +73,7 @@ let rec infer_bind isCon env t1 =
     (match e with
     | Explicit Impure ->
       None
-    | Explicit Pure | Implicit ->
+    | Explicit Pure | Implicit | ImplicitModule ->
       infer_bind true (add_typs aksc (add_typs aksd env)) tc
       |> Lib.Option.map (fun (tc, zs, ec) ->
          (FunT(aksd, td, ExT(aksc, tc), e),
@@ -242,7 +242,7 @@ let rec sub_typ oneway env t1 t2 ps =
       IL.genE(erase_bind aks2, (IL.LamE("y", erase_typ t21,
         IL.AppE(f2, IL.AppE(IL.instE(e1, List.map erase_typ ts1),
           IL.AppE(f1, IL.VarE("y")))))))
-
+          
     | WrapT(s1), WrapT(s2) ->
       let _, zs, f =
         try sub_extyp oneway env s1 s2 []
@@ -352,6 +352,14 @@ let rec sub_typ oneway env t1 t2 ps =
     | t1, (InferT(z) as t2) ->
       if not (resolve_typ z t1) then raise (Sub (Mismatch(t1, t2)));
       [], [], e1
+
+    | t1', AppT(InferT(z), [t2']) -> 
+      (* TODO *)
+      (try let zs1 = equal_typ env t1' t2' in
+        resolve_always z (LamT(["abc", BaseK], VarT("abc", BaseK)));
+        [], zs1, e1
+      with Sub e ->
+        raise (Sub (Mismatch(t1, t2))))  
 
     | t1', t2' when unify_typ t1' t2' ->
       [], [], e1

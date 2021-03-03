@@ -34,6 +34,17 @@ let convert_num s =
   done;
   !n
 
+let convert_float s1 s2 = 
+  let n = ref 0.0 in
+  let d = ref 0.0 in
+  for i = 0 to String.length s1 - 1 do
+    n := !n*.10.0 +. float_of_int (Char.code s1.[i] - Char.code '0')
+  done;
+  for i = String.length s2 - 1 downto 0 do
+    d := !d*.0.1 +. float_of_int (Char.code s2.[i] - Char.code '0')
+  done;
+  !n +. (!d *. 0.1)
+
 let convert_escape = function
   | 'n' -> '\n'
   | 't' -> '\t'
@@ -270,6 +281,7 @@ rule token = parse
   | "fun" { FUN }
   | "if" { IF }
   | "in" { IN }
+  | "implicit" { IMPLICIT }
   | "..." { ELLIPSIS }
   | "let" { LET }
   | "||" { LOGICAL_OR }
@@ -291,6 +303,7 @@ rule token = parse
   | "->" { ARROW }
   | "~>" { SARROW }
   | "=>" { DARROW }
+  | (num as s1)'.'(num as s2) { FLOAT (convert_float s1 s2) }
   | "." { DOT }
   | "'" { TICK }
   | "(" { LPAR }

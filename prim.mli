@@ -9,6 +9,7 @@ type typ =
   | IntT
   | CharT
   | TextT
+  | FloatT
   | VarT
 
 type effect =
@@ -18,6 +19,7 @@ type effect =
 type const =
   | BoolV of bool
   | IntV of int
+  | FloatV of float
   | CharV of char
   | TextV of string
   | FunV of func

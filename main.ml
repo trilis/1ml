@@ -197,7 +197,7 @@ let process path source =
         state := List.fold_right2 Lambda.Env.add ls vs !state
       end
     end;
-    env := Env.add_row typrow (Env.add_typs aks !env)
+    env := Env.add_row typrow (Env.add_typs aks !env) false false
   with Source.Error (at, s) ->
     error at s
 

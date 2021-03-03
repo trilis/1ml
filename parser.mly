@@ -26,7 +26,7 @@ let parse_error s = raise (Source.Error (Source.nowhere_region, s))
 %}
 
 %token HOLE PRIMITIVE
-%token FUN REC LET IN DO WRAP TYPE ELLIPSIS
+%token FUN REC LET IN DO WRAP TYPE ELLIPSIS IMPLICIT
 %token IF THEN ELSE LOGICAL_OR LOGICAL_AND AS
 %token EQUAL COLON SEAL ARROW SARROW DARROW
 %token WITH
@@ -47,6 +47,7 @@ let parse_error s = raise (Source.Error (Source.nowhere_region, s))
 %token<string> SYM
 %token<string> TEXT
 %token<char> CHAR
+%token<float> FLOAT
 %token<int> NUM
 
 %start prog sigs
@@ -167,6 +168,8 @@ annparam :
        funT(tps,
          Lib.Option.value $3 ~default:(TypT@@at()), Pure@@ati 2)@@ati 2,
        Expl@@ati 2)@@at() }
+  | LBRACKET head annot RBRACKET
+    { (headB($2)@@ati 2, $3, ImplModule@@at())@@at() }
   | implparam
     { $1 }
 ;
@@ -372,6 +375,8 @@ atexp :
     { match Prim.fun_of_string $2 with
       | Some f -> PrimE(Prim.FunV f)@@at()
       | None -> parse_error ("unknown primitive \"" ^ $2 ^ "\"") }
+  | FLOAT
+    { PrimE(Prim.FloatV($1))@@at() }
   | NUM
     { PrimE(Prim.IntV($1))@@at() }
   | CHAR
@@ -386,6 +391,8 @@ atexp :
     { match $2 with [e] -> e | es -> tupE(es)@@at() }
   | LPAR DOT label RPAR
     { dotopE($3)@@at() }
+  | LBRACKET exp RBRACKET
+    { ModuleArgE($2)@@at() }
   | IMPORT TEXT
     { ImportE($2@@ati 2)@@at() }
 ;
@@ -493,13 +500,17 @@ bindanns_opt :
 
 atbind :
   | funbind bindanns_opt EQUAL exp
-    { let (h, ps) = $1 in VarB(h, funE(ps, $2($4))@@at())@@at() }
+    { let (h, ps) = $1 in VarB(h, funE(ps, $2($4))@@at(), false)@@at() }
+  | IMPLICIT funbind bindanns_opt EQUAL exp
+    { let (h, ps) = $2 in VarB(h, funE(ps, $3($5))@@at(), true)@@at() }
   | bindpat bindanns_opt EQUAL exp
-    { patB($1, $2($4))@@at() }
+    { patB($1, $2($4), false)@@at() }
+  | IMPLICIT bindpat bindanns_opt EQUAL exp
+    { patB($2, $3($5), true)@@at() }
   | name
-    { VarB($1, VarE($1.it@@at())@@at())@@at() }
+    { VarB($1, VarE($1.it@@at())@@at(), false)@@at() }
   | typpat bindanns_opt typdef
-    { VarB(fst $1, funE(snd $1, $2($3))@@at())@@at() }
+    { VarB(fst $1, funE(snd $1, $2($3))@@at(), false)@@at() }
   | ELLIPSIS exp
     { inclB($2)@@at() }
   | DO exp

@@ -435,7 +435,9 @@ let rec guess_typ vars = function
   | ProdK(kr) ->
     let tzsr = map_row (guess_typ vars) kr in
     TupT(map_row fst tzsr), List.concat (List.map snd (List.map snd tzsr))
-  | FunK _ -> assert false
+  | FunK (kr, k) -> let i = stamp () in
+    let z = ref (Undet{id = i; level = i; vars = vars; il = None}) in
+    InferT(z), [z]
 
 let guess_typs vars aks =
   List.fold_right (fun (a, k) (ts, zs) ->
@@ -474,7 +476,7 @@ and extrude_extyp u vs = function
 and extrude_row u vs = List.for_all (fun (l, t) -> extrude_typ u vs t)
 
 let update_infer z t =
-  assert (kind_of_typ t = BaseK);
+  (*assert (kind_of_typ t = BaseK);*)
   let u = match !z with Undet u -> u | Det _ -> assert false in
   z := Det t;
   (match u.il with None -> () | Some t' -> ignore (Lazy.force t'))
@@ -522,6 +524,9 @@ let rec unify_typ t1 t2 =
   | FunT([], t11, ExT([], t12), Explicit Impure),
     FunT([], t21, ExT([], t22), Explicit Impure) ->
     unify_typ t11 t21 && unify_typ t12 t22
+   | FunT([], t11, ExT([], t12), Explicit Pure),
+    FunT([], t21, ExT([], t22), Explicit Pure) ->
+      unify_typ t11 t21 && unify_typ t12 t22
   | WrapT(ExT(aks1, t11)), WrapT(ExT(aks2, t21)) ->
     List.map snd aks1 = List.map snd aks2 &&
     unify_typ t11 (subst_typ (subst aks2 (varTs aks1)) t21)
@@ -530,6 +535,7 @@ let rec unify_typ t1 t2 =
     unify_typ t11 (subst_typ (subst [ak2] (varTs [ak1])) t21)
   | TypT(ExT([], t1')), TypT(ExT([], t2')) ->
     unify_typ t1' t2'
+  | AppT(t1, ts1), AppT(t2, ts2) -> List.for_all2 unify_typ ts1 ts2 && unify_typ t1 t2
   | _, _ -> false
     
 and unify_row r1 r2 =

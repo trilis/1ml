@@ -49,18 +49,19 @@ and exp' =
   | RollE of var * typ
   | IfE of var * exp * exp
   | DotE of exp * var
-  | AppE of var * var
+  | AppE of var * var * impl
   | UnwrapE of var * typ
   | UnrollE of var * typ
   | RecE of var * typ * exp
   | ImportE of path
   | AnnotE of exp * typ
+  | ModuleArgE of exp
 
 and bind = (bind', unit) phrase
 and bind' =
   | EmptyB
   | SeqB of bind * bind
-  | VarB of var * exp
+  | VarB of var * exp * bool
   | InclB of exp
   | TypeAssertB of bool * exp
 
@@ -72,7 +73,7 @@ let rec every_var pr b =
   match b.it with
   | EmptyB -> true
   | SeqB(b1, b2) -> every_var pr b1 && every_var pr b2
-  | VarB(v, _) -> pr v
+  | VarB(v, _, _) -> pr v
   | InclB(_) -> false
   | TypeAssertB(_) -> true
 
@@ -127,7 +128,7 @@ let inclB(e) =
 
 let dotE(e, l) =
   match e.it with
-  | StrE({it = VarB(x, e)}) when x.it = l.it -> e.it
+  | StrE({it = VarB(x, e, false)}) when x.it = l.it -> e.it
   | _ -> DotE(e, l)
 
 (* Sugar *)
@@ -139,7 +140,7 @@ let asVarB(e, pr) =
     b, l
   | _ ->
     let x = uniq_var()@@e.at in
-    VarB(x, e)@@e.at, x
+    VarB(x, e, false)@@e.at, x
 
 let letE(b1, e) =
   let b2, x = asVarB(e, fun _ -> true) in
@@ -167,7 +168,7 @@ and tupE' n = function
   | [] -> EmptyB@@nowhere_region
   | e::es ->
     let b = tupE' (n + 1) es in
-    seqB(VarB((index n)@@e.at, e)@@e.at, b)@@
+    seqB(VarB((index n)@@e.at, e, false)@@e.at, b)@@
       (match b.it with EmptyB -> e.at | _ -> span[e.at; b.at])
 
 let rec funT(ps, t, f) = (funT'(ps, t, f)).it
@@ -180,7 +181,7 @@ and funT'(ps, t, f) =
     let x, t2' =
       match b.it with
       | EmptyB -> "_"@@p.at, t2
-      | VarB(x, {it = VarE({it = "$"})}) -> x, t2
+      | VarB(x, {it = VarE({it = "$"})}, false) -> x, t2
       | _ -> "$"@@p.at, letT(b, t2)@@span[p.at; t2.at]
     in FunT(x, t1, t2', f.it@@f.at, i)@@span[p.at; t.at]
 
@@ -194,7 +195,7 @@ and funE'(ps, e) =
     let x, e'' =
       match b.it with
       | EmptyB -> "_"@@p.at, e'
-      | VarB(x, {it = VarE({it = "$"})}) -> x, e'
+      | VarB(x, {it = VarE({it = "$"})}, false) -> x, e'
       | _ -> "$"@@p.at, letE(b, e')@@span[p.at; e.at]
     in FunE(x, t, e'', i)@@span[p.at; e.at]
 
@@ -217,9 +218,12 @@ let andE(e1, e2) =
   ifE(e1, e2, PrimE(Prim.BoolV(false))@@e1.at)
 
 let appE(e1, e2) =
+  let i = match e2.it with
+    | ModuleArgE _ -> ImplModule
+    | _ -> Expl in
   asVarE(e1, fun x1 ->
   asVarE(e2, fun x2 ->
-  AppE(x1, x2)@@span[e1.at; e2.at])@@span[e1.at; e2.at])
+  AppE(x1, x2, i@@e2.at)@@span[e1.at; e2.at])@@span[e1.at; e2.at])
 
 let wrapE(e, t) =
   asVarE(e, fun x -> WrapE(x, t)@@span[e.at; t.at])
@@ -249,7 +253,7 @@ let recT(p, t2) =
   let e = typE(t2)@@t2.at in
   let e' =
     match b.it with
-    | VarB(x, {it = VarE({it = "$"})}) -> RecE(x, t1, e)
+    | VarB(x, {it = VarE({it = "$"})}, false) -> RecE(x, t1, e)
     | EmptyB -> RecE("_"@@b.at, t1, e)
     | _ -> RecE("$"@@b.at, t1, letE(b, e)@@span[b.at; e.at])
   in PathT(e'@@span[p.at; t2.at])
@@ -257,11 +261,11 @@ let recT(p, t2) =
 let recE(p, e) =
   let b, t = p.it in
   match b.it with
-  | VarB(x, {it = VarE({it = "$"})}) -> RecE(x, t, e)
+  | VarB(x, {it = VarE({it = "$"})}, false) -> RecE(x, t, e)
   | EmptyB -> RecE("_"@@b.at, t, e)
   | _ -> RecE("$"@@b.at, t, letE(b, e)@@span[b.at; e.at])
 
-let patB(p, e) =
+let patB(p, e, i) =
   let e' =
     match p.it.annot with
     | None -> e
@@ -270,13 +274,13 @@ let patB(p, e) =
   let b =
     match p.it.bind.it with
     | EmptyB -> doB(e')
-    | VarB(x, {it = VarE({it = "$"})}) -> VarB(x, e')
-    | _ -> letB(VarB("$"@@e.at, e')@@e.at, p.it.bind)
+    | VarB(x, {it = VarE({it = "$"})}, _) -> VarB(x, e', i)
+    | _ -> letB(VarB("$"@@e.at, e', i)@@e.at, p.it.bind)
   in
   match p.it.infer with
   | None -> b
   | Some t ->
-    letB(VarB(uniq_var()@@p.at, annotE(e, t)@@span[e.at; t.at])@@p.at, b@@p.at)
+    letB(VarB(uniq_var()@@p.at, annotE(e, t)@@span[e.at; t.at], i)@@p.at, b@@p.at)
 
 let asTopt(to1, to2) =
   match to1, to2 with
@@ -296,7 +300,7 @@ let defaultTP p =
    | None -> TypT@@p.at
    | Some t -> t)@@p.at
 
-let varB x = VarB(x, VarE("$"@@x.at)@@x.at)
+let varB x = VarB(x, VarE("$"@@x.at)@@x.at, false)
 let varP x = {bind = varB(x)@@x.at; infer = None; annot = None}
 
 let headB id = if id.it = "_" then EmptyB else varB(id)
@@ -315,8 +319,8 @@ let annotP(p, t2) =
 let wrapP(p, t2) =
   {bind =
     letB(
-      VarB("$"@@t2.at, UnwrapE("$"@@t2.at, t2)@@t2.at)@@t2.at,
-      patB(p, VarE("$"@@t2.at)@@t2.at)@@span[p.at; t2.at]
+      VarB("$"@@t2.at, UnwrapE("$"@@t2.at, t2)@@t2.at, false)@@t2.at,
+      patB(p, VarE("$"@@t2.at)@@t2.at, false)@@span[p.at; t2.at]
     )@@span[p.at; t2.at];
    infer = None;
    annot = None}
@@ -332,7 +336,7 @@ let strP(xps, region) =
       List.fold_right (fun xp (b, d) ->
         let x, p = xp.it in
         let _, t = (defaultP p).it in
-        seqB(patB(p, DotE(VarE("$"@@xp.at)@@xp.at, x)@@xp.at)@@xp.at, b)
+        seqB(patB(p, DotE(VarE("$"@@xp.at)@@xp.at, x)@@xp.at, false)@@xp.at, b)
           @@span[b.at; p.at],
         seqD(VarD(x, t.it@@p.at)@@xp.at, d)@@span[d.at; p.at]
       ) xps (EmptyB@@xp.at, EmptyD@@xp.at)
@@ -346,8 +350,8 @@ let tupP(ps, region) = strP(tupP' 1 ps, region)
 let rollP(p, t2) =
   {bind =
     letB(
-      VarB("$"@@t2.at, UnrollE("$"@@t2.at, t2)@@t2.at)@@t2.at,
-      patB(p, VarE("$"@@t2.at)@@t2.at)@@span[p.at; t2.at]
+      VarB("$"@@t2.at, UnrollE("$"@@t2.at, t2)@@t2.at, false)@@t2.at,
+      patB(p, VarE("$"@@t2.at)@@t2.at, false)@@span[p.at; t2.at]
     )@@span[p.at; t2.at];
    infer = None;
    annot = Some t2}
@@ -414,6 +418,7 @@ let label_of_exp e =
   | RecE _ -> "RecE"
   | ImportE _ -> "ImportE"
   | AnnotE _ -> "AnnotE"
+  | ModuleArgE _ -> "ModuleArgE"
 
 let label_of_bind b =
   match b.it with
@@ -468,19 +473,20 @@ and string_of_exp e =
   | IfE(x, e1, e2) ->
     node' [string_of_var x; string_of_exp e1; string_of_exp e2]
   | DotE(e, x) -> node' [string_of_exp e; string_of_var x]
-  | AppE(x1, x2) -> node' [string_of_var x1; string_of_var x2]
+  | AppE(x1, x2, i) -> node' [string_of_var x1; string_of_var x2]
   | UnwrapE(x, t) -> node' [string_of_var x; string_of_typ t]
   | UnrollE(x, t) -> node' [string_of_var x; string_of_typ t]
   | RecE(x, t, e) -> node' [string_of_var x; string_of_typ t; string_of_exp e]
   | ImportE(p) -> node' ["\"" ^ String.escaped p.it ^ "\""]
   | AnnotE(e, t) -> node' [string_of_exp e; string_of_typ t]
+  | ModuleArgE e -> node' ["[" ^ string_of_exp e ^ "]"]
 
 and string_of_bind b =
   let node' = node (label_of_bind b) in
   match b.it with
   | EmptyB -> node' []
   | SeqB(b1, b2) -> node' [string_of_bind b1; string_of_bind b2]
-  | VarB(x, e) -> node' [string_of_var x; string_of_exp e]
+  | VarB(x, e, i) -> node' [if i then "implicit " else ""; string_of_var x; string_of_exp e]
   | InclB(e) -> node' [string_of_exp e]
   | TypeAssertB(b, e) -> node' [string_of_bool b; string_of_exp e]
 
@@ -523,11 +529,12 @@ and imports_exp exp =
   | RecE(_, typ, exp) -> imports_typ typ @ imports_exp exp
   | ImportE path -> [path]
   | AnnotE(exp, typ) -> imports_exp exp @ imports_typ typ
+  | ModuleArgE exp -> imports_exp exp
 
 and imports_bind bind =
   match bind.it with
   | EmptyB -> []
   | SeqB(bind1, bind2) -> imports_bind bind1 @ imports_bind bind2
-  | VarB(_, exp) -> imports_exp exp
+  | VarB(_, exp, _) -> imports_exp exp
   | InclB exp -> imports_exp exp
   | TypeAssertB(_, exp) -> imports_exp exp

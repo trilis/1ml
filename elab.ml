@@ -167,12 +167,43 @@ let rec fully fn pre r =
   | None -> r
   | Some r -> fully fn pre r
 
+let rec expand_function = function 
+  | FunT(aks1, t1, ExT([], t2), ImplicitModule) -> 
+    let args, res, aks2 = expand_function t2 in t1 :: args, res, aks1 @ aks2
+  | x -> ([], x, [])
+
+let rec implicit_search env aks1 t1 zs = 
+  List.filter_map(fun v -> let cand = Env.lookup_val v env in 
+  let ts', zs' = guess_typs (Env.domain_typ env) aks1 in
+  let t1'' = subst_typ 
+    (List.map (fun ((a, b), c) -> (a, match !c with | Det (InferT _) -> b | Det t -> t | _ -> b))
+    (List.combine (List.combine (List.map fst aks1) ts') zs)) t1 in
+  match cand with 
+  | FunT(_, _, _, ImplicitModule) -> 
+    let argTs, resT, aks2 = expand_function cand in
+    let ts2, zs2 = guess_typs (Env.domain_typ env) aks2 in
+    let argTs = List.map (subst_typ (subst aks2 ts2)) argTs in
+    let resT = (subst_typ (subst aks2 ts2) resT) in
+    let sub = try Some (sub_typ env resT t1'' (varTs aks2)) with Sub _ -> None in
+    let term = List.fold_left (fun e argT -> 
+    Option.bind e (fun e -> 
+    (match sub with
+    | None -> None
+    | _ -> let candidates = implicit_search env aks2 argT zs2 in
+      let term, _ = List.hd candidates in
+      if (List.length candidates = 1) then (Some (EL.asVarE(term, fun k -> 
+                                                  EL.asVarE(e, fun f -> 
+                                                   EL.AppE(f, k, EL.Expl@@nowhere_region)@@nowhere_region)@@nowhere_region)@@nowhere_region)) else None))) 
+      (Some (EL.VarE(v@@nowhere_region)@@nowhere_region)) argTs in
+    Option.map (fun e -> (e, resT)) term
+  | _ ->
+    try sub_typ env cand t1'' (varTs aks1); Some ((EL.VarE (v@@nowhere_region))@@nowhere_region, cand) with Sub _ -> None) (Env.impl_names env)
 
 (* Instantiation *)
 
 let rec instantiate env t e =
   match follow_typ t with
-  | FunT(aks1, t1, ExT(aks2, t2), Implicit) ->
+  | FunT(aks1, t1, ExT(aks2, t2), Implicit)->
     assert (aks2 = []);
     let ts, zs = guess_typs (Env.domain_typ env) aks1 in
     let t', zs', e' =
@@ -180,6 +211,10 @@ let rec instantiate env t e =
         (IL.AppE(IL.instE(e, List.map erase_typ ts),
           materialize_typ (subst_typ (subst aks1 ts) t1)))
     in t', zs @ zs', e'
+  | FunT(aks1, t1, ExT(aks2, t2), ImplicitModule) ->
+    assert (aks2 = []);
+    let ts, zs = guess_typs (Env.domain_typ env) aks1 in
+    t, zs, IL.instE(e, List.map erase_typ ts)
   | t -> t, [], e
 
 
@@ -327,7 +362,7 @@ and elab_dec env dec l =
   | EL.SeqD(dec1, dec2) ->
     (match elab_dec env dec1 l with
     | ExT(aks1, StrT(tr1)), zs1 ->
-      (match elab_dec (add_row tr1 (add_typs aks1 env)) dec2 l with
+      (match elab_dec (add_row tr1 (add_typs aks1 env) false false) dec2 l with
       | ExT(aks2, StrT(tr2)), zs2 ->
         let ls = intersect_row tr1 tr2 in
         if ls <> [] then
@@ -388,6 +423,41 @@ and elab_const = function
   | Prim.FunV(f) -> elab_prim_fun f
   | c -> PrimT(Prim.typ_of_const c), IL.PrimE(c)
 
+and elab_fun env tf var1 var2 e = match freshen_typ env tf with
+| FunT(aks1, t1, s, Explicit p) -> aks1, t1, s, p, [], false, e
+| InferT(z) ->
+  let t1, zs1 = guess_typ (Env.domain_typ env) BaseK in
+  let t2, zs2 = guess_typ (Env.domain_typ env) BaseK in
+  let s = ExT([], t2) in
+  resolve_always z (FunT([], t1, s, Explicit Impure));
+  [], t1, s, Impure, zs1 @ zs2, false, e
+| FunT(aks1, t1, ExT([], FunT([], t3, s, p)), ImplicitModule) -> 
+  let t2 = lookup_val var2.it env in 
+  let ts, zs = guess_typs (Env.domain_typ env) aks1 in 
+  let t1' = (subst_typ (subst aks1 ts) t1) in
+  let t3 = (subst_typ (subst aks1 ts) t3) in
+  let s = (subst_extyp (subst aks1 ts) s) in
+  let term, typ = (if is_explicit_module var2.it env then (IL.VarE(var2.it), t2) else
+    (sub_typ env t2 t3 (varTs aks1);
+    let candidates = implicit_search env aks1 t1 zs in
+    List.iter (fun (elterm, _) -> print_string (EL.string_of_exp elterm)) candidates;
+    assert (List.length candidates == 1);
+    let elterm, typ = List.hd candidates in
+    let _, _, _, term = elab_exp env elterm "" in
+    term, typ)) in
+  sub_typ env typ t1' (varTs aks1);
+  if is_explicit_module var2.it env then 
+      [], t1', ExT([], FunT([], t3, s, p)), Impure, [], false, e
+  else 
+    [], t3, s, Impure, [], true, IL.AppE(e, term)
+| FunT(aks1, t1, s, ImplicitModule) -> 
+  let ts, zs = guess_typs (Env.domain_typ env) aks1 in 
+  let t1' = (subst_typ (subst aks1 ts) t1) in
+  let s = (subst_extyp (subst aks1 ts) s) in
+  [], t1', s, Impure, [], true, e
+| _ -> print_typ (freshen_typ env tf); error var1.at "expression is not a function"
+
+
 and elab_exp env exp l =
   Trace.elab (lazy ("[elab_exp] " ^ EL.label_of_exp exp));
   let lift = lift (level ()) in
@@ -408,13 +478,13 @@ Trace.debug (lazy ("[VarE] s = " ^ string_of_norm_extyp (ExT([], lookup_var env 
     ExT([], TypT(s)), Pure, zs, IL.LamE("_", erase_extyp s, IL.TupE[])
 
   | EL.StrE(bind) ->
-    elab_bind env bind l
+    let a, b, c, d, _ = elab_bind env bind l  in (a, b, c, d)
 
   | EL.FunE(var, typ, exp2, impl) ->
 Trace.debug (lazy ("[FunE] " ^ string_of_region exp.at));
     let ExT(aks, t) as s1, zs1 = elab_typ env typ var.it in
     let s, p, zs2, e2 =
-      elab_exp (add_val var.it t (add_typs aks env)) exp2 "" in
+      elab_exp ((match impl.it with | EL.ImplModule -> add_impl_val | _ -> add_val) var.it t (add_typs aks env)) exp2 "" in
 Trace.debug (lazy ("[FunE] s1 = " ^ string_of_norm_extyp s1));
 Trace.debug (lazy ("[FunE] s2 = " ^ string_of_norm_extyp s));
 Trace.debug (lazy ("[FunE] env =" ^ VarSet.fold (fun a s -> s ^ " " ^ a) (domain_typ env) ""));
@@ -423,6 +493,7 @@ Trace.debug (lazy ("[FunE] env =" ^ VarSet.fold (fun a s -> s ^ " " ^ a) (domain
       match p, elab_impl env impl with
       | Impure, Explicit _ -> Explicit Impure
       | Pure, f -> f
+      | _, ImplicitModule -> ImplicitModule
       | _ -> error impl.at "impure function cannot be implicit" in
     ExT([], FunT(aks, t, s, p')), Pure,
     lift (* TODO: _warn exp.at *) (FunT(aks, t, s, p')) env (zs1 @ zs2),
@@ -501,29 +572,15 @@ Trace.debug (lazy ("[DotE] s = " ^ string_of_extyp s));
       IL.packE(List.map erase_typ (varTs aks'),
         IL.DotE(IL.VarE("x"), var.it), erase_extyp s))
 
-  | EL.AppE(var1, var2) ->
+  | EL.AppE(var1, var2, i) ->
     let tf, zs1, ex1 = fully try_peel avar (elab_instvar env var1) in
 Trace.debug (lazy ("[AppE] tf = " ^ string_of_norm_typ tf));
-    let aks1, t1, s, p, zs, im =
-      match freshen_typ env tf with
-      | FunT(aks1, t1, s, Explicit p) -> aks1, t1, s, p, [], false
-      | InferT(z) ->
-        let t1, zs1 = guess_typ (Env.domain_typ env) BaseK in
-        let t2, zs2 = guess_typ (Env.domain_typ env) BaseK in
-        let s = ExT([], t2) in
-        resolve_always z (FunT([], t1, s, Explicit Impure));
-        [], t1, s, Impure, zs1 @ zs2, false
-      | FunT(aks1, t1, s, ImplicitModule) -> aks1, t1, s, Impure, [], true
-      | _ -> error var1.at "expression is not a function" in
+    let aks1, t1, s, p, zs, im, ex1 = elab_fun env tf var1 var2 ex1 in
     let t2 = lookup_var env var2 in
+    
 Trace.debug (lazy ("[AppE] s1 = " ^ string_of_norm_extyp (ExT(aks1, t1))));
 Trace.debug (lazy ("[AppE] t2 = " ^ string_of_norm_typ t2));
-    if im && (try snd (sub_typ env t2 t1 (varTs aks1), false) with Sub e -> true) then
-      let names = names env in
-      let marg = List.fold_right (fun name acc ->
-        try snd (sub_typ env (lookup_val name env) t1 (varTs aks1), name) with Sub e -> acc) names ""
-      in elab_exp env ((EL.asVarE ((EL.AppE(var1, marg@@nowhere_region))@@nowhere_region, fun x -> (EL.AppE(x, var2))@@nowhere_region))@@nowhere_region) l
-    else let ts, zs3, f =
+    let ts, zs3, f =
       try sub_typ env t2 t1 (varTs aks1) with Sub e -> error var2.at
         ("argument type does not match function: " ^ Sub.string_of_error e)
     in
@@ -630,7 +687,7 @@ Trace.debug (lazy ("[RecT] t = " ^ string_of_norm_typ t));
       appE(FunE(x', t, VarE(x')@@t.at, Expl@@t.at)@@span[e.at; t.at], e)@@exp.at
     in
     elab_exp env exp l
-
+  | EL.ModuleArgE e -> elab_exp env e l
 (*
 rec (X : (b : type) => {type t; type u a}) fun (b : type) => {type t = (X int.u b, X bool.t); type u a = (a, X b.t)}
 s1 = ?Xt:*->*, Xu:*->*->*. !b:*. [= b] -> {t : [= Xt b], u : !a:*. [= a] => [= Xu b a]}
@@ -649,10 +706,13 @@ t = !b:*. [= b] -> {t : [= t4.t b], u : !a:*. [= a] => [= (a, t4.u b a)]}
 and elab_bind env bind l =
   Trace.elab (lazy ("[elab_bind] " ^ EL.label_of_bind bind));
   let lift_warn = lift_warn (level ()) in
-  (fun (s, p, zs, e) -> bind.at, env, s, zs, Some e, EL.label_of_bind bind) <<<
+  (fun (s, p, zs, e, i) -> bind.at, env, s, zs, Some e, EL.label_of_bind bind) <<<
   match bind.it with
-  | EL.VarB(var, exp) ->
+  | EL.VarB(var, exp, i) ->
     let l' = var.it in
+    let expl_module = (match exp.it with 
+      | EL.ModuleArgE _ -> true
+      | _ -> false ) in 
     let ExT(aks, t), p, zs, e = elab_genexp env exp (append_path l l') in
     Trace.bind (lazy ("[VarB] " ^ l' ^ " : " ^
       string_of_norm_extyp (ExT(aks, t))));
@@ -660,7 +720,7 @@ and elab_bind env bind l =
     s, p, zs,
     IL.openE(e, List.map fst aks, var.it,
       IL.packE(List.map erase_typ (varTs aks), IL.TupE[l', IL.VarE(var.it)],
-        erase_extyp s))
+        erase_extyp s)), (i, expl_module)
 
   | EL.InclB(exp) ->
     let ExT(aks, t) as s, p, zs, e =
@@ -670,27 +730,27 @@ and elab_bind env bind l =
     | InferT(z) -> resolve_always z (StrT[])  (* TODO: row polymorphism *)
     | _ -> error bind.at "included expression is not a structure"
     );
-    s, p, zs, e
+    s, p, zs, e, (false, false)
 
   | EL.TypeAssertB(true, exp) ->
     let _ = elab_exp env exp l in
-    ExT([], StrT[]), Pure, [], IL.TupE[]
+    ExT([], StrT[]), Pure, [], IL.TupE[], (false, false)
 
   | EL.TypeAssertB(false, exp) ->
     (match try Some (elab_exp env exp l) with _ -> None with
-    | None -> ExT([], StrT[]), Pure, [], IL.TupE[]
+    | None -> ExT([], StrT[]), Pure, [], IL.TupE[], (false, false)
     | Some (s, _, _, _) ->
        error exp.at ("expected error, but got: " ^ Types.string_of_extyp s)
     )
 
   | EL.EmptyB ->
-    ExT([], StrT[]), Pure, [], IL.TupE[]
+    ExT([], StrT[]), Pure, [], IL.TupE[], (false, false)
 
   | EL.SeqB(bind1, bind2) ->
     (match elab_bind env bind1 l with
-    | ExT(aks1, StrT(tr1)), p1, zs1, e1 ->
-      (match elab_bind (add_row tr1 (add_typs aks1 env)) bind2 l with
-      | ExT(aks2, StrT(tr2)), p2, zs2, e2 ->
+    | ExT(aks1, StrT(tr1)), p1, zs1, e1, (i, expl_module) ->
+      (match elab_bind (add_row tr1 (add_typs aks1 env) i expl_module) bind2 l with
+      | ExT(aks2, StrT(tr2)), p2, zs2, e2, i ->
         let tr1' = diff_row tr1 tr2 in
         let s = ExT(aks1 @ aks2, StrT(tr1' @ tr2)) in
         let x1 = IL.rename "x1" and x2 = IL.rename "x2" in
@@ -710,7 +770,7 @@ Trace.debug (lazy ("[SeqB] s = " ^ string_of_norm_extyp s));
               )
             )
           )
-        )
+        ), (false, false)
       | _ -> error bind.at "internal SeqB2"
       )
     | _ -> error bind.at "internal SeqB1"
